@@ -1,0 +1,26 @@
+{
+  "name": "brewit-crypto-skill",
+  "version": "1.0.0",
+  "description": "Agent skill for cryptocurrency transactions using Brewit smart accounts on Base",
+  "type": "module",
+  "scripts": {
+    "create-account": "node scripts/create-account.js",
+    "check-balance": "node scripts/check-balance.js",
+    "send-usdc": "node scripts/send-usdc.js",
+    "batch-send": "node scripts/batch-send.js"
+  },
+  "dependencies": {
+    "brewit": "^0.1.11",
+    "viem": "^2.45.1"
+  },
+  "keywords": [
+    "brewit",
+    "crypto",
+    "base",
+    "erc4337",
+    "account-abstraction",
+    "agent-skill",
+    "openclaw"
+  ],
+  "license": "MIT"
+}
