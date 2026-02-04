@@ -1,41 +1,33 @@
 #!/usr/bin/env node
 /**
- * Send USDC using Brewit smart account
- * Usage: node send-usdc.js <private-key> <recipient> <amount> <pimlico-api-key>
- * Example: node send-usdc.js 0x... 0xRecipient 0.1 pim_...
+ * Send an ERC-20 token using Brewit smart account
+ * Usage: node send-token.js <token> <recipient> <amount>
+ * Example: node send-token.js USDC 0xRecipient 0.1
  */
 
 import { toAccount } from 'brewit/account';
 import { createAccountClient } from 'brewit';
 import { privateKeyToAccount } from 'viem/accounts';
 import { encodeFunctionData, parseUnits } from 'viem';
+import { PRIVATE_KEY, PIMLICO_API_KEY } from './config.js';
+import { ERC20_ABI, getToken } from './tokens.js';
 
 const CHAIN_ID = 8453;
 const RPC_ENDPOINT = 'https://mainnet.base.org';
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-
-const ERC20_ABI = [{
-  inputs: [
-    { name: 'to', type: 'address' },
-    { name: 'amount', type: 'uint256' },
-  ],
-  name: 'transfer',
-  outputs: [{ name: '', type: 'bool' }],
-  stateMutability: 'nonpayable',
-  type: 'function',
-}];
 
 async function main() {
-  const [privateKey, recipient, amount, pimlicoKey] = process.argv.slice(2);
-  
-  if (!privateKey || !recipient || !amount || !pimlicoKey) {
-    console.error('Usage: node send-usdc.js <private-key> <recipient> <amount> <pimlico-api-key>');
-    console.error('Example: node send-usdc.js 0x... 0xRecipient 0.1 pim_...');
+  const [tokenSymbol, recipient, amount] = process.argv.slice(2);
+
+  if (!tokenSymbol || !recipient || !amount) {
+    console.error('Usage: node send-token.js <token> <recipient> <amount>');
+    console.error('Example: node send-token.js USDC 0xRecipient 0.1');
     process.exit(1);
   }
 
-  const bundlerUrl = `https://api.pimlico.io/v2/${CHAIN_ID}/rpc?apikey=${pimlicoKey}`;
-  const signer = privateKeyToAccount(privateKey);
+  const token = getToken(tokenSymbol);
+
+  const bundlerUrl = `https://api.pimlico.io/v2/${CHAIN_ID}/rpc?apikey=${PIMLICO_API_KEY}`;
+  const signer = privateKeyToAccount(PRIVATE_KEY);
 
   console.log('Creating Brewit account...');
   const account = await toAccount({
@@ -48,20 +40,20 @@ async function main() {
 
   console.log('From:', account.address);
   console.log('To:', recipient);
-  console.log('Amount:', amount, 'USDC\n');
+  console.log('Amount:', amount, tokenSymbol.toUpperCase(), '\n');
 
   const data = encodeFunctionData({
     abi: ERC20_ABI,
     functionName: 'transfer',
-    args: [recipient, parseUnits(amount, 6)],
+    args: [recipient, parseUnits(amount, token.decimals)],
   });
 
   console.log('Sending transaction...');
   const client = createAccountClient(account, bundlerUrl);
-  
+
   const tx = await client.sendTransaction({
     account: account,
-    to: USDC_ADDRESS,
+    to: token.address,
     value: 0n,
     data: data,
   });

@@ -1,41 +1,33 @@
 #!/usr/bin/env node
 /**
- * Send USDC to multiple recipients in one transaction
- * Usage: node batch-send.js <private-key> <pimlico-api-key> <recipient1:amount1> <recipient2:amount2> ...
- * Example: node batch-send.js 0x... pim_... 0xAddr1:0.1 0xAddr2:0.2
+ * Send a token to multiple recipients in one transaction
+ * Usage: node batch-send-token.js <token> <recipient1:amount1> <recipient2:amount2> ...
+ * Example: node batch-send-token.js USDC 0xAddr1:0.1 0xAddr2:0.2
  */
 
 import { toAccount } from 'brewit/account';
 import { createAccountClient } from 'brewit';
 import { privateKeyToAccount } from 'viem/accounts';
 import { encodeFunctionData, parseUnits } from 'viem';
+import { PRIVATE_KEY, PIMLICO_API_KEY } from './config.js';
+import { ERC20_ABI, getToken } from './tokens.js';
 
 const CHAIN_ID = 8453;
 const RPC_ENDPOINT = 'https://mainnet.base.org';
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-
-const ERC20_ABI = [{
-  inputs: [
-    { name: 'to', type: 'address' },
-    { name: 'amount', type: 'uint256' },
-  ],
-  name: 'transfer',
-  outputs: [{ name: '', type: 'bool' }],
-  stateMutability: 'nonpayable',
-  type: 'function',
-}];
 
 async function main() {
-  const [privateKey, pimlicoKey, ...recipients] = process.argv.slice(2);
-  
-  if (!privateKey || !pimlicoKey || recipients.length === 0) {
-    console.error('Usage: node batch-send.js <private-key> <pimlico-api-key> <recipient1:amount1> <recipient2:amount2> ...');
-    console.error('Example: node batch-send.js 0x... pim_... 0xAddr1:0.1 0xAddr2:0.2');
+  const [tokenSymbol, ...recipients] = process.argv.slice(2);
+
+  if (!tokenSymbol || recipients.length === 0) {
+    console.error('Usage: node batch-send-token.js <token> <recipient1:amount1> <recipient2:amount2> ...');
+    console.error('Example: node batch-send-token.js USDC 0xAddr1:0.1 0xAddr2:0.2');
     process.exit(1);
   }
 
-  const bundlerUrl = `https://api.pimlico.io/v2/${CHAIN_ID}/rpc?apikey=${pimlicoKey}`;
-  const signer = privateKeyToAccount(privateKey);
+  const token = getToken(tokenSymbol);
+
+  const bundlerUrl = `https://api.pimlico.io/v2/${CHAIN_ID}/rpc?apikey=${PIMLICO_API_KEY}`;
+  const signer = privateKeyToAccount(PRIVATE_KEY);
 
   console.log('Creating Brewit account...');
   const account = await toAccount({
@@ -47,20 +39,21 @@ async function main() {
   });
 
   console.log('From:', account.address);
+  console.log('Token:', tokenSymbol.toUpperCase());
   console.log('\nRecipients:');
 
   const calls = recipients.map(item => {
     const [to, amount] = item.split(':');
-    console.log(`  → ${to}: ${amount} USDC`);
-    
+    console.log(`  → ${to}: ${amount} ${tokenSymbol.toUpperCase()}`);
+
     const data = encodeFunctionData({
       abi: ERC20_ABI,
       functionName: 'transfer',
-      args: [to, parseUnits(amount, 6)],
+      args: [to, parseUnits(amount, token.decimals)],
     });
 
     return {
-      to: USDC_ADDRESS,
+      to: token.address,
       value: 0n,
       data: data,
     };
@@ -68,7 +61,7 @@ async function main() {
 
   console.log(`\nSending ${calls.length} transfers in 1 transaction...`);
   const client = createAccountClient(account, bundlerUrl);
-  
+
   const tx = await client.sendTransaction({
     account: account,
     calls: calls,

@@ -1,26 +1,18 @@
 #!/usr/bin/env node
 /**
- * Check ETH and USDC balance of a Brewit smart account
+ * Check ETH and token balances of a Brewit smart account
  * Usage: node check-balance.js <smart-account-address>
  */
 
 import { createPublicClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
+import { TOKENS, ERC20_ABI } from './tokens.js';
 
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const RPC_ENDPOINT = 'https://mainnet.base.org';
-
-const ERC20_ABI = [{
-  inputs: [{ name: 'account', type: 'address' }],
-  name: 'balanceOf',
-  outputs: [{ name: '', type: 'uint256' }],
-  stateMutability: 'view',
-  type: 'function',
-}];
 
 async function main() {
   const address = process.argv[2];
-  
+
   if (!address) {
     console.error('Usage: node check-balance.js <smart-account-address>');
     process.exit(1);
@@ -34,16 +26,18 @@ async function main() {
   });
 
   const ethBalance = await publicClient.getBalance({ address });
-  const usdcBalance = await publicClient.readContract({
-    address: USDC_ADDRESS,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: [address],
-  });
-
   console.log('💰 Balances:');
   console.log('   ETH:', formatUnits(ethBalance, 18), 'ETH');
-  console.log('   USDC:', formatUnits(usdcBalance, 6), 'USDC');
+
+  for (const [symbol, token] of Object.entries(TOKENS)) {
+    const balance = await publicClient.readContract({
+      address: token.address,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+    console.log(`   ${symbol}:`, formatUnits(balance, token.decimals), symbol);
+  }
 }
 
 main().catch(console.error);

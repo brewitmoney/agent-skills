@@ -22,13 +22,14 @@ Perform cryptocurrency operations using Brewit smart accounts with account abstr
    npm install brewit viem
    ```
 
-2. **Get Pimlico API key** (bundler for gasless transactions):
-   - Sign up at https://pimlico.io
-   - Get API key (starts with `pim_`)
-
-3. **Private key**:
-   - Create or use existing Ethereum private key
-   - Store securely (never commit to git)
+2. **Configure `.env` file** in the project root with:
+   ```
+   PIMLICO_API_KEY=pim_...
+   PRIVATE_KEY=0x...
+   ```
+   - Get a Pimlico API key at https://pimlico.io (starts with `pim_`)
+   - Use an existing Ethereum private key or create a new one
+   - The `.env` file is gitignored and never committed
 
 ## Quick Start
 
@@ -37,8 +38,9 @@ Perform cryptocurrency operations using Brewit smart accounts with account abstr
 ```javascript
 import { toAccount } from 'brewit/account';
 import { privateKeyToAccount } from 'viem/accounts';
+import { PRIVATE_KEY } from './scripts/config.js';
 
-const signer = privateKeyToAccount('0x...');
+const signer = privateKeyToAccount(PRIVATE_KEY);
 
 const account = await toAccount({
   chainId: 8453,                        // Base mainnet
@@ -56,8 +58,7 @@ console.log('Smart Account:', account.address);
 ```javascript
 import { createPublicClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
-
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+import { TOKENS, ERC20_ABI } from './scripts/tokens.js';
 
 const publicClient = createPublicClient({
   chain: base,
@@ -65,58 +66,47 @@ const publicClient = createPublicClient({
 });
 
 // ETH balance
-const ethBalance = await publicClient.getBalance({ 
-  address: account.address 
+const ethBalance = await publicClient.getBalance({
+  address: account.address
 });
 console.log('ETH:', formatUnits(ethBalance, 18));
 
-// USDC balance
-const usdcBalance = await publicClient.readContract({
-  address: USDC_ADDRESS,
-  abi: [{
-    inputs: [{ name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  }],
-  functionName: 'balanceOf',
-  args: [account.address],
-});
-console.log('USDC:', formatUnits(usdcBalance, 6));
+// Token balances (iterates all tokens in the registry)
+for (const [symbol, token] of Object.entries(TOKENS)) {
+  const balance = await publicClient.readContract({
+    address: token.address,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [account.address],
+  });
+  console.log(`${symbol}:`, formatUnits(balance, token.decimals));
+}
 ```
 
-### 3. Send USDC
+### 3. Send Tokens
 
 ```javascript
 import { createAccountClient } from 'brewit';
 import { encodeFunctionData, parseUnits } from 'viem';
+import { PIMLICO_API_KEY } from './scripts/config.js';
+import { ERC20_ABI, getToken } from './scripts/tokens.js';
 
-const PIMLICO_API_KEY = 'pim_...';
 const BUNDLER_URL = `https://api.pimlico.io/v2/8453/rpc?apikey=${PIMLICO_API_KEY}`;
+const token = getToken('USDC'); // or 'WETH', etc.
 
 const client = createAccountClient(account, BUNDLER_URL);
 
 // Encode transfer
 const data = encodeFunctionData({
-  abi: [{
-    inputs: [
-      { name: 'to', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    name: 'transfer',
-    outputs: [{ name: '', type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  }],
+  abi: ERC20_ABI,
   functionName: 'transfer',
-  args: ['0xRecipientAddress', parseUnits('0.1', 6)], // 0.1 USDC
+  args: ['0xRecipientAddress', parseUnits('0.1', token.decimals)],
 });
 
 // Send transaction
 const tx = await client.sendTransaction({
   account: account,
-  to: USDC_ADDRESS,
+  to: token.address,
   value: 0n,
   data: data,
 });
@@ -128,23 +118,27 @@ console.log('View:', `https://basescan.org/tx/${tx}`);
 ### 4. Batch Transactions (Multiple Recipients)
 
 ```javascript
+import { ERC20_ABI, getToken } from './scripts/tokens.js';
+
+const token = getToken('USDC');
+
 const calls = [
   {
-    to: USDC_ADDRESS,
+    to: token.address,
     value: 0n,
     data: encodeFunctionData({
-      abi: [/* ERC20 ABI */],
+      abi: ERC20_ABI,
       functionName: 'transfer',
-      args: ['0xRecipient1', parseUnits('0.1', 6)],
+      args: ['0xRecipient1', parseUnits('0.1', token.decimals)],
     }),
   },
   {
-    to: USDC_ADDRESS,
+    to: token.address,
     value: 0n,
     data: encodeFunctionData({
-      abi: [/* ERC20 ABI */],
+      abi: ERC20_ABI,
       functionName: 'transfer',
-      args: ['0xRecipient2', parseUnits('0.2', 6)],
+      args: ['0xRecipient2', parseUnits('0.2', token.decimals)],
     }),
   },
 ];
@@ -172,15 +166,18 @@ const address = await ensClient.getEnsAddress({
 });
 
 // Then send to that address on Base
+import { ERC20_ABI, getToken } from './scripts/tokens.js';
+const token = getToken('USDC');
+
 const data = encodeFunctionData({
-  abi: [/* ERC20 ABI */],
+  abi: ERC20_ABI,
   functionName: 'transfer',
-  args: [address, parseUnits('0.1', 6)],
+  args: [address, parseUnits('0.1', token.decimals)],
 });
 
 const tx = await client.sendTransaction({
   account: account,
-  to: USDC_ADDRESS,
+  to: token.address,
   value: 0n,
   data: data,
 });
@@ -194,35 +191,22 @@ const tx = await client.sendTransaction({
 - **Explorer**: https://basescan.org
 
 ### Token Addresses (Base)
-- **USDC**: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
-- **WETH**: `0x4200000000000000000000000000000000000006`
+Token addresses and decimals are maintained in `scripts/tokens.js`:
+- **USDC**: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (6 decimals)
+- **WETH**: `0x4200000000000000000000000000000000000006` (18 decimals)
+
+To add a new token, add an entry to the `TOKENS` object in `scripts/tokens.js`.
 
 ### Pimlico Bundler
 - **URL format**: `https://api.pimlico.io/v2/{chainId}/rpc?apikey={apiKey}`
 - **Base**: `https://api.pimlico.io/v2/8453/rpc?apikey=pim_...`
 
-## ERC20 ABI (Minimal)
+## ERC20 ABI
+
+The minimal ERC20 ABI (balanceOf, transfer) is exported from `scripts/tokens.js`:
 
 ```javascript
-const ERC20_ABI = [
-  {
-    inputs: [{ name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'to', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    name: 'transfer',
-    outputs: [{ name: '', type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-];
+import { ERC20_ABI } from './scripts/tokens.js';
 ```
 
 ## Important Notes

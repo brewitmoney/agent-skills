@@ -1,22 +1,18 @@
 #!/usr/bin/env node
 /**
  * Create a Brewit smart account from a private key
- * Usage: node create-account.js <private-key>
+ * Usage: node create-account.js
  */
 
 import { toAccount } from 'brewit/account';
 import { privateKeyToAccount } from 'viem/accounts';
+import { PRIVATE_KEY } from './config.js';
 
 const CHAIN_ID = 8453;
 const RPC_ENDPOINT = 'https://mainnet.base.org';
 
 async function main() {
-  const privateKey = process.argv[2];
-  
-  if (!privateKey) {
-    console.error('Usage: node create-account.js <private-key>');
-    process.exit(1);
-  }
+  const privateKey = PRIVATE_KEY;
 
   console.log('Creating Brewit smart account...\n');
 

@@ -6,8 +6,8 @@
   "scripts": {
     "create-account": "node scripts/create-account.js",
     "check-balance": "node scripts/check-balance.js",
-    "send-usdc": "node scripts/send-usdc.js",
-    "batch-send": "node scripts/batch-send.js"
+    "send-token": "node scripts/send-token.js",
+    "batch-send-token": "node scripts/batch-send-token.js"
   },
   "dependencies": {
     "brewit": "^0.1.11",
